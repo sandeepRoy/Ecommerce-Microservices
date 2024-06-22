@@ -54,13 +54,14 @@ public class CustomerController {
             return new ResponseEntity<>(cart, HttpStatus.OK);
             // test this
             // test 1 : using token as RequestParam: user_email populated
-            // test 2 : generating token in background
+            // test 2 : generating token in background, logout not working (current logged in user stays logged in)
         }
     }
 
     @GetMapping("/logout")
     public ResponseEntity<String> logoutCustomer() {
         String response = customerService.logoutCustomer();
+        TOKEN = "";
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
