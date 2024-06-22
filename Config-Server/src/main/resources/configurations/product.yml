@@ -1,0 +1,14 @@
+server:
+  port: 8086
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/msa_ecommerce_payment
+    username: root
+    password: Online#9900
+    driver-class-name: com.mysql.cj.jdbc.Driver
