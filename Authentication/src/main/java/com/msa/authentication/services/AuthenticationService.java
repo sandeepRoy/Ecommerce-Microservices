@@ -39,7 +39,6 @@ public class AuthenticationService {
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .role(Role.USER)
                 .build();
-        System.out.println("42: AuthenticationServer : : " + user.toString());
 
         User save = userRepository.save(user);
 

@@ -15,7 +15,9 @@ public class Cart {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer wishlist_id;
 
-    private String user_email;
+    private String user_name; // should be fetched from customer table
+
+    private String user_email; // should be fetched from customer table
 
     private String product_name;
 

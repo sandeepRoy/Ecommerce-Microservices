@@ -4,6 +4,8 @@ import com.msa.customer.clients.AuthenticationClient;
 import com.msa.customer.dtos.CreateCartDto;
 import com.msa.customer.dtos.LoginCustomerDto;
 import com.msa.customer.dtos.RegisterCustomerDto;
+import com.msa.customer.dtos.UpdateCustomerDto;
+import com.msa.customer.model.Customer;
 import com.msa.customer.responses.Root;
 import com.msa.customer.services.CustomerService;
 import com.msa.customer.model.Cart;
@@ -39,8 +41,9 @@ public class CustomerController {
 
     @PostMapping("/login")
     public ResponseEntity<String> loginCustomer(@RequestBody LoginCustomerDto loginCustomerDto) {
-        TOKEN = authenticationClient.loginUser(loginCustomerDto);// TOKEN is in JSON
+        TOKEN = authenticationClient.loginUser(loginCustomerDto);
         customerService.setTOKEN(TOKEN);
+        customerService.addCustomer(loginCustomerDto);
         return new ResponseEntity<>("Log In SuccessFull!", HttpStatus.OK);
     }
 
@@ -52,9 +55,18 @@ public class CustomerController {
         else {
             Cart cart = customerService.addToCart(createCartDto);
             return new ResponseEntity<>(cart, HttpStatus.OK);
-            // test this
-            // test 1 : using token as RequestParam: user_email populated
-            // test 2 : generating token in background, logout not working (current logged in user stays logged in)
+        }
+    }
+
+    // Update Profile
+    @PutMapping("/update")
+    public ResponseEntity<Customer> updateCustomerProfile(@RequestBody UpdateCustomerDto updateCustomerDto) {
+        if(TOKEN == null) {
+            throw new RuntimeException("Customer Not Logged In or Registered!");
+        }
+        else{
+            Customer customer = customerService.updateCustomerProfile(updateCustomerDto);
+            return new ResponseEntity<>(customer, HttpStatus.CREATED);
         }
     }
 
@@ -69,13 +81,13 @@ public class CustomerController {
 
     // Controllers
     // 1 : browse without login (Y)
-    // 2:  add To Cart (user needs to be logged in, save data to cart table)
-    // 3:  pay (no need to login again, save data to order table)
-    // 4:  update profile (no need to login again, save data in user table)
-    // 5:  logout
+    // 2:  add To Cart (user needs to be logged in, save data to cart table) (Y)
+    // 3:  update profile (no need to login again, save data in user table) (attempting)
+    // 4:  pay (no need to login again, save data to order table)
+    // 5:  logout (Y)
 
     // Conditions
     // 1: If logged in to update profile, no need to login again to add To Cart or pay
-    // 2 : If not logged in, and done add to Cart, ask to login
-    // 3: if logged in during add to cart, not required to login for payment
+    // 2: If not logged in, and done add to Cart, ask to login (Y)
+    // 3: if logged in during add to cart, not required to log in for payment
 }
