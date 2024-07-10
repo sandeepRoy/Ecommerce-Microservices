@@ -1,6 +1,7 @@
 package com.msa.authentication.controller;
 
 import com.msa.authentication.entities.User;
+import com.msa.authentication.repositories.UserRepository;
 import com.msa.authentication.responses.AuthResponse;
 import com.msa.authentication.requests.AuthenticateRequest;
 import com.msa.authentication.responses.UserProfileResponse;
@@ -22,6 +23,9 @@ public class AuthController {
     @Autowired
     public AuthenticationService authenticationService;
 
+    @Autowired
+    public UserRepository userRepository;
+
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest registerRequest) {
         return ResponseEntity.ok(authenticationService.register(registerRequest));
@@ -32,21 +36,10 @@ public class AuthController {
         return ResponseEntity.ok(authenticationService.authenticate(authenticateRequest));
     }
 
-    @GetMapping("/profile")
-    public ResponseEntity<UserDetails> getUserName() {
-        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return new ResponseEntity<>(userDetails, HttpStatus.OK);
-    }
-
-    @GetMapping("/public")
-    public ResponseEntity<UserProfileResponse> getPublicDataForUser() {
-        User user = (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-
-        UserProfileResponse userProfileResponse = new UserProfileResponse();
-        userProfileResponse.setFirstName(user.getFirstname());
-        userProfileResponse.setLasName(user.getLastname());
-
-        return new ResponseEntity<>(userProfileResponse, HttpStatus.OK);
+    @DeleteMapping("/remove")
+    public ResponseEntity<String> delete(@RequestParam String token) {
+        String response = authenticationService.remove(token);
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     @PostMapping("/logout")

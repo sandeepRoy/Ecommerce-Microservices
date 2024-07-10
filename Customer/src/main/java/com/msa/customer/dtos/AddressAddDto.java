@@ -1,22 +1,24 @@
 package com.msa.customer.dtos;
 
-
-import com.msa.customer.model.Gender;
+import com.msa.customer.model.AddressType;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class UpdateCustomerDto {
-    private String customer_name;
-    private String customer_mobile;
+public class AddressAddDto {
     @Enumerated(EnumType.STRING)
-    private Gender gender;
-    private UpdateAddressDto updateAddressDto;
+    private AddressType addressType;
+
+    private String address;
+
+    private String city;
+
+    private String state;
+
+    private Integer pincode;
 }

@@ -57,4 +57,12 @@ public class AuthenticationService {
 
         return AuthResponse.builder().token(token).build();
     }
+
+    public String remove(String token) {
+        String user_email = jwtService.extractUsername(token);
+        User userFound = userRepository.findUserByEmail(user_email).orElseThrow(() -> new UsernameNotFoundException("User Not Found"));
+        userRepository.delete(userFound);
+
+        return "User Deleted";
+    }
 }

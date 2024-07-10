@@ -1,9 +1,12 @@
 package com.msa.customer.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Entity
 @Table(name = "cart")
@@ -13,19 +16,17 @@ import lombok.NoArgsConstructor;
 public class Cart {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer wishlist_id;
+    private Integer cart_id;
+    private Double total_amount;
+    private String modeOfPayment;
 
-    private String user_name; // should be fetched from customer table
+    @OneToOne
+    private Customer customer;
 
-    private String user_email; // should be fetched from customer table
-
-    private String product_name;
-
-    private String product_manufacturer;
-
-    private Double product_price;
-
-    private Integer product_quantity;
-
-    private Double payable_amount;
+    @OneToMany(
+            mappedBy = "cart",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL
+    )
+    private List<Wishlist> wishlistList;
 }

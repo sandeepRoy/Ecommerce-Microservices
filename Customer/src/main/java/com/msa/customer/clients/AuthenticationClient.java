@@ -4,9 +4,7 @@ import com.msa.customer.dtos.LoginCustomerDto;
 import com.msa.customer.dtos.RegisterCustomerDto;
 import com.msa.customer.responses.UserProfileResponse;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.*;
 
 @FeignClient(name = "authentication", url = "http://localhost:8084/auth")
 public interface AuthenticationClient {
@@ -15,4 +13,7 @@ public interface AuthenticationClient {
 
     @PostMapping("/login")
     public String loginUser(@RequestBody LoginCustomerDto loginCustomerDto);
+
+    @DeleteMapping("/remove")
+    public String removeUser(@RequestParam String token);
 }

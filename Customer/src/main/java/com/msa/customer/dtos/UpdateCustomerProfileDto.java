@@ -1,6 +1,6 @@
 package com.msa.customer.dtos;
 
-import com.msa.customer.model.AddressType;
+import com.msa.customer.model.Gender;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
@@ -10,12 +10,9 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class UpdateAddressDto {
-    private String address;
-
-    private String city;
-
-    private String state;
-
-    private Integer pincode;
+public class UpdateCustomerProfileDto {
+    private String customer_name;
+    private String customer_mobile;
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
 }

@@ -1,29 +1,32 @@
 package com.msa.customer.services;
 
-
 import com.msa.customer.clients.AuthenticationClient;
 import com.msa.customer.clients.CategoryWithProductsClient;
 import com.msa.customer.clients.ProductClient;
-import com.msa.customer.dtos.CreateCartDto;
-import com.msa.customer.dtos.LoginCustomerDto;
-import com.msa.customer.dtos.UpdateAddressDto;
-import com.msa.customer.dtos.UpdateCustomerDto;
+import com.msa.customer.dtos.*;
+import com.msa.customer.exceptions.address.add.AddressAdditionException;
+import com.msa.customer.exceptions.address.update.AddressUpdateException;
+import com.msa.customer.exceptions.customer.firstLogin.CustomerLoginException;
+import com.msa.customer.exceptions.customer.secondLogin.CustomerPreviouslyLoggedInException;
 import com.msa.customer.model.Address;
-import com.msa.customer.model.Cart;
+import com.msa.customer.model.AddressType;
+import com.msa.customer.model.Wishlist;
 import com.msa.customer.model.Customer;
 import com.msa.customer.repositories.AddressRepository;
-import com.msa.customer.repositories.CartRepository;
+import com.msa.customer.repositories.WishlistRepository;
 import com.msa.customer.repositories.CustomerRepository;
 import com.msa.customer.responses.ProductList;
 import com.msa.customer.responses.Root;
-import com.msa.customer.responses.UserProfileResponse;
-import io.jsonwebtoken.Jwts;
-import lombok.extern.slf4j.Slf4j;
+
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+
+import io.jsonwebtoken.Jwts;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
@@ -41,7 +44,7 @@ public class CustomerService {
     public ProductClient productClient;
 
     @Autowired
-    public CartRepository cartRepository;
+    public WishlistRepository wishlistRepository;
 
     @Autowired
     public CustomerRepository customerRepository;
@@ -78,20 +81,66 @@ public class CustomerService {
         return allCategoryWithProducts;
     }
 
-    // POST - After Login, make an entry in Customer table
-    public Customer addCustomer(LoginCustomerDto loginCustomerDto) {
-        userEmail = getUserEmail(TOKEN);
+    // GET - Logged In Customer's Profile and Address
+    public Customer getCustomerProfile() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In!");
+        }
 
         Customer customer = new Customer();
-        customer.setCustomer_email(loginCustomerDto.getEmail());
+        customer.setCustomer_email(userEmail);
 
-        Customer new_customer = customerRepository.save(customer);
-        return new_customer;
+        Example<Customer> customerExample = Example.of(customer);
+        Customer found_customer = customerRepository.findOne(customerExample).get();
+
+        return found_customer;
     }
 
-    // PUT - Update Customer's profile by logged-in user's email
-    // Condition - Get Logged-In User's firstname and lastName from Authentication Server - ??
-    public Customer updateCustomerProfile(UpdateCustomerDto updateCustomerDto) {
+    // POST - After Login, make an entry in Customer table
+    // Condition - Check Existing entry before inserting new!!!!
+    public Customer addCustomer(LoginCustomerDto loginCustomerDto) throws CustomerPreviouslyLoggedInException {
+        userEmail = getUserEmail(TOKEN);
+
+        List<Customer> all_customers = customerRepository.findAll();
+
+        for(Customer customer : all_customers) {
+            if(customer.getCustomer_email().equals(userEmail)){
+                throw new CustomerPreviouslyLoggedInException("Login SuccessFull!");
+            }
+        }
+        Customer new_customer = new Customer();
+        new_customer.setCustomer_email(userEmail);
+        Customer saved_customer = customerRepository.save(new_customer);
+        return saved_customer;
+    }
+
+    // PUT - Update Logged In Customer's Profile
+    public Customer updateCustomerProfile(UpdateCustomerProfileDto updateCustomerProfileDto) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In!");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer found_customer = customerRepository.findOne(customerExample).get();
+
+        found_customer.setCustomer_name(updateCustomerProfileDto.getCustomer_name());
+        found_customer.setCustomer_mobile(updateCustomerProfileDto.getCustomer_mobile());
+        found_customer.setGender(updateCustomerProfileDto.getGender());
+
+        Customer updated_customer = customerRepository.save(found_customer);
+        return updated_customer;
+    }
+
+    // POST - Add Address to Customer's profile by logged-in user's email
+    // Condition - Limit Address by 2
+    public Customer addAddressToCustomer(AddressAddDto addressAddDto) throws CustomerLoginException, AddressAdditionException {
+
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
 
         Customer customer = new Customer();
         customer.setCustomer_email(userEmail);
@@ -99,50 +148,132 @@ public class CustomerService {
         Example<Customer> customerExample = Example.of(customer);
         Customer found_customer = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found!"));
 
-        found_customer.setCustomer_name(updateCustomerDto.getCustomer_name()); userName = updateCustomerDto.getCustomer_name();
-        found_customer.setCustomer_mobile(updateCustomerDto.getCustomer_mobile());
-        found_customer.setGender(updateCustomerDto.getGender());
+        List<Address> addressList = found_customer.getAddressList();
 
-        UpdateAddressDto updateAddressDto = updateCustomerDto.getUpdateAddressDto();
-        Address new_address = new Address();
-        new_address.setCustomer(found_customer);
-        new_address.setAddressType(updateAddressDto.getAddressType());
-        new_address.setAddress(updateAddressDto.getAddress());
-        new_address.setCity(updateAddressDto.getCity());
-        new_address.setState(updateAddressDto.getState());
-        new_address.setPincode(updateAddressDto.getPincode());
-        addressRepository.save(new_address);
-
-        Customer updated_customer = customerRepository.save(found_customer);
-        return updated_customer;
+        if(addressList.size() <= 1) {
+            Address new_address = new Address();
+            new_address.setCustomer(found_customer);
+            new_address.setAddressType(addressAddDto.getAddressType());
+            new_address.setAddress(addressAddDto.getAddress());
+            new_address.setCity(addressAddDto.getCity());
+            new_address.setState(addressAddDto.getState());
+            new_address.setPincode(addressAddDto.getPincode());
+            addressRepository.save(new_address);
+            Customer updated_customer = customerRepository.save(found_customer);
+            return updated_customer;
+        }
+        else{
+            throw new AddressAdditionException("More than 2 Addresses are not allowed!");
+        }
     }
 
+    public Customer updateAddressOfCustomer(String addressType, UpdateAddressDto updateAddressDto) throws CustomerLoginException, AddressUpdateException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        if(addressType != "HOME" && addressType != "WORK") {
+            throw new AddressUpdateException("Incorrect Address Type Provided in Path");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+        Example<Customer> customerExample = Example.of(customer);
+        Customer found_customer = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found!"));
+
+        List<Address> addressList = found_customer.getAddressList();
+
+        for(Address address : addressList) {
+            if(address.getAddressType() == AddressType.valueOf(addressType)) {
+                address.setAddress(updateAddressDto.getAddress());
+                address.setCity(updateAddressDto.getCity());
+                address.setState(updateAddressDto.getState());
+                address.setPincode(updateAddressDto.getPincode());
+
+                addressRepository.save(address);
+            }
+        }
+
+        return found_customer;
+    }
+
+    // DELETE - Remove an address of Logged-in Customer
+    public Customer deleteAddressOfCustomer(String addressType) throws CustomerLoginException {
+
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer found_customer = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found!"));
+
+        List<Address> addressList = found_customer.getAddressList();
+        for(Address address : addressList){
+            if(address.getAddressType() == AddressType.valueOf(addressType)) {
+                addressList.remove(address);
+                addressRepository.delete(address);
+            }
+        }
+
+        return found_customer;
+    }
+
+    public String deleteCustomer() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer found_customer = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found!"));
+
+        customerRepository.delete(found_customer);
+
+        String response = authenticationClient.removeUser(TOKEN);
+
+        return response;
+    }
 
     // POST - Add Product to Cart with Logged-In User's email
-    public Cart addToCart(CreateCartDto createCartDto) {
+    public Wishlist addToWishList(CreateWishlistDto createWishlistDto) throws CustomerLoginException {
 
-        ProductList productByName = productClient.getProductByName(createCartDto.getProduct_name());
+        ProductList productByName = productClient.getProductByName(createWishlistDto.getProduct_name());
 
-        Cart cart = new Cart();
-        cart.setUser_email(userEmail);
-        cart.setUser_name(userName);
-        cart.setProduct_name(createCartDto.getProduct_name());
-        cart.setProduct_price(productByName.getProduct_price());
-        cart.setProduct_manufacturer(createCartDto.getProduct_manufacturer());
-        cart.setProduct_quantity(createCartDto.getProduct_quantity());
-        cart.setPayable_amount(productByName.getProduct_price() * createCartDto.getProduct_quantity());
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
 
-        Cart cart_user = cartRepository.save(cart);
-        return cart_user;
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Wishlist wishlist = new Wishlist();
+        wishlist.setProduct_name(createWishlistDto.getProduct_name());
+        wishlist.setProduct_manufacturer(createWishlistDto.getProduct_manufacturer());
+        wishlist.setProduct_quantity(createWishlistDto.getProduct_quantity());
+        wishlist.setPayable_amount(productByName.getProduct_price() * createWishlistDto.getProduct_quantity());
+        wishlist.setCustomer(customer_found);
+
+        Wishlist wishlist_user = wishlistRepository.save(wishlist);
+        return wishlist_user;
     }
+
+
 
     public String logoutCustomer() {
         TOKEN = "";
         return "Customer Logged Out!";
     }
 
-    public String isValidRequest(CreateCartDto createCartDto, ProductList productByName) {
-        if(productByName.getProduct_inStock() < createCartDto.getProduct_quantity()) {
+    public String isValidRequest(CreateWishlistDto createWishlistDto, ProductList productByName) {
+        if(productByName.getProduct_inStock() < createWishlistDto.getProduct_quantity()) {
             return "Requested quantity greater than available stock";
         }
         else{

@@ -32,4 +32,11 @@ public class Customer {
             cascade = CascadeType.ALL
     )
     private List<Address> addressList;
+
+    @OneToMany(
+            mappedBy = "customer",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL
+    )
+    private List<Wishlist> wishlist;
 }
