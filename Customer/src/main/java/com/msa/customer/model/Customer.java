@@ -1,5 +1,6 @@
 package com.msa.customer.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -39,4 +40,12 @@ public class Customer {
             cascade = CascadeType.ALL
     )
     private List<Wishlist> wishlist;
+
+    @OneToOne(
+            mappedBy = "customer",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL
+    )
+    @JsonIgnore
+    private Cart cart;
 }

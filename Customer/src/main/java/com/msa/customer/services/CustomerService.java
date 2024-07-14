@@ -8,17 +8,16 @@ import com.msa.customer.exceptions.address.add.AddressAdditionException;
 import com.msa.customer.exceptions.address.update.AddressUpdateException;
 import com.msa.customer.exceptions.customer.firstLogin.CustomerLoginException;
 import com.msa.customer.exceptions.customer.secondLogin.CustomerPreviouslyLoggedInException;
-import com.msa.customer.model.Address;
-import com.msa.customer.model.AddressType;
-import com.msa.customer.model.Wishlist;
-import com.msa.customer.model.Customer;
+import com.msa.customer.model.*;
 import com.msa.customer.repositories.AddressRepository;
+import com.msa.customer.repositories.CartRepository;
 import com.msa.customer.repositories.WishlistRepository;
 import com.msa.customer.repositories.CustomerRepository;
 import com.msa.customer.responses.ProductList;
 import com.msa.customer.responses.Root;
 
 
+import jakarta.persistence.criteria.CriteriaBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
@@ -51,6 +50,9 @@ public class CustomerService {
 
     @Autowired
     public AddressRepository addressRepository;
+
+    @Autowired
+    public CartRepository cartRepository;
 
     @Autowired
     public AuthenticationClient authenticationClient;
@@ -265,6 +267,116 @@ public class CustomerService {
         return wishlist_user;
     }
 
+    // POST - Add Wishlist items, Delivery Address and Customer to Cart
+    public Cart addToCart(CreateCartDto createCartDto) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Cart cart = new Cart();
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        List<Address> foundCustomer_addressList = customer_found.getAddressList();
+        List<Wishlist> foundCustomer_wishlist = customer_found.getWishlist();
+
+        Address delivery_address = new Address();
+
+        for(Address address : foundCustomer_addressList) {
+            if(address.getAddressType().equals(AddressType.valueOf(createCartDto.getAddressType()))) {
+                delivery_address = address;
+            }
+        }
+
+        Double totalPayableAmount = getTotalPayableAmount(foundCustomer_wishlist);
+
+        cart.setCustomer_name(customer_found.getCustomer_name());
+        cart.setCustomer_mobile(customer_found.getCustomer_mobile());
+        cart.setCustomer_email(customer_found.getCustomer_email());
+        cart.setCustomer_gender(customer_found.getGender());
+        cart.setCustomer(customer_found);
+        cart.setTotal_amount(totalPayableAmount);
+        cart.setModeOfPayment(createCartDto.getModeOfPayment());
+        cart.setDelivery_address(delivery_address);
+
+        for(Wishlist wishlist : foundCustomer_wishlist) {
+            cart.addWishlistItem(wishlist);
+        }
+
+        Cart save = cartRepository.save(cart);
+
+        return save;
+    }
+
+    // GET - Cart of a customer
+    public Cart getCart() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Cart cart = customer_found.getCart();
+        return cart;
+    }
+
+    // PUT - Update Cart as per given params for a Customer
+    public Cart updateCart_changeQuantity(String product_name, Integer quantity) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Cart cart = customer_found.getCart();
+
+        if(quantity == null) {
+            return cart;
+        }
+
+        List<Wishlist> customer_wishlist = cart.getWishlist();
+
+        for(Wishlist wishlist : customer_wishlist) {
+            if(wishlist.getProduct_name().equals(product_name)) {
+                ProductList productByName = productClient.getProductByName(wishlist.getProduct_name());
+
+                if(productByName.getProduct_inStock() > quantity) {
+                    wishlist.setProduct_quantity(quantity);
+                    wishlist.setPayable_amount(productByName.getProduct_price() * quantity);
+                    wishlistRepository.save(wishlist);
+                }
+                else {
+                    throw new RuntimeException("Quantity required isn't available in stock");
+                }
+            }
+        }
+        Double totalPayableAmount = getTotalPayableAmount(customer_wishlist);
+        cart.setTotal_amount(totalPayableAmount);
+        Cart updated_cart = cartRepository.save(cart);
+        return updated_cart;
+    }
+
+    private Double getTotalPayableAmount(List<Wishlist> foundCustomerWishlist) {
+        Double totalPaybleAmount = 0.0;
+
+        for(Wishlist wishlist : foundCustomerWishlist) {
+            totalPaybleAmount += wishlist.getPayable_amount();
+        }
+
+        return totalPaybleAmount;
+    }
 
 
     public String logoutCustomer() {

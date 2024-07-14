@@ -32,4 +32,8 @@ public class Address {
     @JoinColumn(name = "customer_id")
     @JsonIgnore
     private Customer customer;
+
+    @OneToOne(mappedBy = "delivery_address")
+    @JsonIgnore
+    private Cart cart;
 }
