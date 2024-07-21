@@ -13,6 +13,7 @@ import com.msa.customer.repositories.AddressRepository;
 import com.msa.customer.repositories.CartRepository;
 import com.msa.customer.repositories.WishlistRepository;
 import com.msa.customer.repositories.CustomerRepository;
+import com.msa.customer.repositories.BuyLaterRepository;
 import com.msa.customer.responses.ProductList;
 import com.msa.customer.responses.Root;
 
@@ -22,10 +23,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import io.jsonwebtoken.Jwts;
 import lombok.extern.slf4j.Slf4j;
+
+import javax.management.RuntimeMBeanException;
 
 @Service
 @Slf4j
@@ -53,6 +58,9 @@ public class CustomerService {
 
     @Autowired
     public CartRepository cartRepository;
+
+    @Autowired
+    public BuyLaterRepository buyLaterRepository;
 
     @Autowired
     public AuthenticationClient authenticationClient;
@@ -267,8 +275,24 @@ public class CustomerService {
         return wishlist_user;
     }
 
+    // GET - Cart of a customer
+    public Cart getCart() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Cart cart = customer_found.getCart();
+        return cart;
+    }
+
     // POST - Add Wishlist items, Delivery Address and Customer to Cart
-    public Cart addToCart(CreateCartDto createCartDto) throws CustomerLoginException {
+    public Cart addToCart_wishlist(CreateCartDto createCartDto) throws CustomerLoginException {
         if(userEmail == null) {
             throw new CustomerLoginException("Customer Not Logged In");
         }
@@ -312,8 +336,10 @@ public class CustomerService {
         return save;
     }
 
-    // GET - Cart of a customer
-    public Cart getCart() throws CustomerLoginException {
+    // PUT - Update cart with new wishlist item
+    public Cart updateCart_addProduct(CreateWishlistDto createWishlistDto) throws CustomerLoginException {
+        ProductList productByName = productClient.getProductByName(createWishlistDto.getProduct_name());
+
         if(userEmail == null) {
             throw new CustomerLoginException("Customer Not Logged In");
         }
@@ -324,11 +350,78 @@ public class CustomerService {
         Example<Customer> customerExample = Example.of(customer);
         Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
 
+        List<Wishlist> customer_wishlist = customer_found.getWishlist();
+
+        Wishlist new_wish = new Wishlist();
+
         Cart cart = customer_found.getCart();
-        return cart;
+
+        // if no cart created earlier
+        if(cart == null) {
+            Cart new_cart = createNewCart();
+
+            List<Wishlist> cartWishlist = new_cart.getWishlist();
+
+            // assign data to wish
+            new_wish.setProduct_name(productByName.getProduct_name());
+            new_wish.setProduct_manufacturer(productByName.getProduct_manufacturer());
+            new_wish.setProduct_quantity(createWishlistDto.getProduct_quantity());
+            new_wish.setPayable_amount(productByName.getProduct_price() * createWishlistDto.getProduct_quantity());
+            new_wish.setCustomer(customer_found);
+            new_wish.setCart(new_cart);
+            wishlistRepository.save(new_wish);
+
+            // add newly created wish to the list holdable
+            cartWishlist.add(new_wish);
+
+            // total payable amount
+            Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
+
+            // since a wish is being created assign it to customer
+            customer_wishlist.add(new_wish);
+            customer_found.setWishlist(customer_wishlist);
+            customerRepository.save(customer_found);
+
+            // assign data to cart
+            new_cart.setCustomer(customer_found);
+            new_cart.setCustomer_name(customer_found.getCustomer_name());
+            new_cart.setCustomer_gender(customer_found.getGender());
+            new_cart.setCustomer_email(customer_found.getCustomer_email());
+            new_cart.setCustomer_mobile(customer_found.getCustomer_mobile());
+            new_cart.setTotal_amount(totalPayableAmount);
+            new_cart.setWishlist(cartWishlist);
+
+            Cart cart_saved = cartRepository.save(new_cart);
+            return cart_saved;
+        }
+
+        // if cart contains data
+        else {
+            List<Wishlist> cart_wishlist = cart.getWishlist();
+
+            new_wish.setProduct_name(productByName.getProduct_name());
+            new_wish.setProduct_manufacturer(productByName.getProduct_manufacturer());
+            new_wish.setProduct_quantity(createWishlistDto.getProduct_quantity());
+            new_wish.setPayable_amount(productByName.getProduct_price() * createWishlistDto.getProduct_quantity());
+            new_wish.setCart(cart);
+            new_wish.setCustomer(customer_found);
+            wishlistRepository.save(new_wish);
+
+            customer_wishlist.add(new_wish);
+            cart_wishlist.add(new_wish);
+
+            customer_found.setWishlist(customer_wishlist);
+            customerRepository.save(customer_found);
+
+            Double totalPayableAmount = getTotalPayableAmount(cart_wishlist);
+            cart.setTotal_amount(totalPayableAmount);
+            cart.setWishlist(cart_wishlist);
+            Cart updated_cart = cartRepository.save(cart);
+            return updated_cart;
+        }
     }
 
-    // PUT - Update Cart as per given params for a Customer
+    // PUT - Update Cart as per given product's quantity
     public Cart updateCart_changeQuantity(String product_name, Integer quantity) throws CustomerLoginException {
         if(userEmail == null) {
             throw new CustomerLoginException("Customer Not Logged In");
@@ -368,16 +461,254 @@ public class CustomerService {
         return updated_cart;
     }
 
+    // PUT - Update cart's delivery address as per given address type
+    public Cart updateCart_changeDeliveryAddress(String address_type) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        List<Address> addressList = customer_found.getAddressList();
+
+        Cart cart = customer_found.getCart();
+
+        Address deliveryAddress = cart.getDelivery_address();
+
+        for(Address address : addressList) {
+            if(address.getAddressType() == AddressType.valueOf(address_type)) {
+                deliveryAddress = address;
+            }
+        }
+
+        cart.setDelivery_address(deliveryAddress);
+        Cart updated_cart = cartRepository.save(cart);
+        return updated_cart;
+    }
+
+    // PUT - Cart, Update Mode of Payment as provided
+    public Cart updateCart_modeOfPayment(String payment_type) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Cart cart = customer_found.getCart();
+        cart.setModeOfPayment(payment_type);
+
+        Cart updated_cart = cartRepository.save(cart);
+        return updated_cart;
+    }
+
+    // PUT - Cart, DELETE : Wishlist, Remove a product from cart, recalculate total amount
+    public Cart updateCart_removeProduct(String product_name) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        Wishlist wish = new Wishlist();
+        wish.setProduct_name(product_name);
+        Example<Wishlist> wishlistExample = Example.of(wish);
+        Wishlist wish_to_remove = wishlistRepository.findOne(wishlistExample).orElseThrow(() -> new RuntimeException("Product Not Found!"));
+        wishlistRepository.delete(wish_to_remove);
+
+        Cart cart = customer_found.getCart();
+        List<Wishlist> cartWishlist = cart.getWishlist();
+        cartWishlist.remove(wish_to_remove);
+
+        Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
+        cart.setTotal_amount(totalPayableAmount);
+        cart.setWishlist(cartWishlist);
+        Cart cart_updated = cartRepository.save(cart);
+        return cart_updated;
+    }
+
+    // POST - Create new entry for BuyLater as per given payload
+    public BuyLater addBuyLater_newProduct(CreateWishlistDto createWishlistDto) throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        ProductList productByName = productClient.getProductByName(createWishlistDto.getProduct_name());
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        List<BuyLater> customer_buyLaterList = customer_found.getBuyLaterList();
+
+        BuyLater buyLater = new BuyLater();
+        buyLater.setBuylater_product_name(createWishlistDto.getProduct_name());
+        buyLater.setBuylater_product_manufacturer(createWishlistDto.getProduct_manufacturer());
+        buyLater.setBuylater_product_quantity(createWishlistDto.getProduct_quantity());
+        buyLater.setBuylater_payable_amount(productByName.getProduct_price() * createWishlistDto.getProduct_quantity());
+        buyLater.setCustomer(customer_found);
+        BuyLater new_buyLater = buyLaterRepository.save(buyLater);
+
+        // if customer's buylater list isn't created earlier
+        if(customer_buyLaterList == null) {
+            List<BuyLater> new_buyLaterList = new ArrayList<>();
+            new_buyLaterList.add(buyLater);
+
+            customer_found.setBuyLaterList(new_buyLaterList);
+            customerRepository.save(customer_found);
+        }
+        // if customer's buylater list already created and have values
+        else {
+            customer_buyLaterList.add(buyLater);
+            customer_found.setBuyLaterList(customer_buyLaterList);
+            customerRepository.save(customer_found);
+        }
+        return new_buyLater;
+    }
+
+    // Testing
+    // PUT : Update Cart with buylater items, re-calculate total amount
+    /*
+    public Cart updateCart_addBuyLater() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Cart updated_cart = new Cart();
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+        Cart cart = customer_found.getCart();
+
+        if(cart == null) {
+            Cart newCart = createNewCart();
+            List<Wishlist> cartWishlist = newCart.getWishlist();
+            List<BuyLater> buyLaterList = customer_found.getBuyLaterList();
+            for(BuyLater buyLater : buyLaterList) {
+                ProductList productByName = productClient.getProductByName(buyLater.getBuylater_product_name());
+
+                // create a new wishlist and save it
+                Wishlist wishlist = new Wishlist();
+                wishlist.setProduct_name(productByName.getProduct_name());
+                wishlist.setProduct_manufacturer(productByName.getProduct_manufacturer());
+                wishlist.setProduct_quantity(buyLater.getBuylater_product_quantity());
+                wishlist.setPayable_amount(productByName.getProduct_price() * buyLater.getBuylater_product_quantity());
+                wishlist.setCart(newCart);
+                wishlist.setCustomer(customer_found);
+                wishlistRepository.save(wishlist);
+
+                // assign newly created wishlist to customer and save it
+                List<Wishlist> customer_wishlist = customer_found.getWishlist();
+                if(customer_wishlist == null) {
+                    List<Wishlist> customer_new_wishlist = new ArrayList<>();
+                    customer_new_wishlist.add(wishlist);
+                    customer_found.setWishlist(customer_new_wishlist);
+                    customerRepository.save(customer_found);
+                }
+                customer_wishlist.add(wishlist);
+                customer_found.setWishlist(customer_wishlist);
+                customerRepository.save(customer_found);
+
+                Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
+
+                // assign newly created wishlist to cart with other details and save it
+                cartWishlist.add(wishlist);
+                newCart.setWishlist(cartWishlist);
+                newCart.setCustomer_name(customer_found.getCustomer_name());
+                newCart.setCustomer_email(customer_found.getCustomer_email());
+                newCart.setCustomer_mobile(customer_found.getCustomer_mobile());
+                newCart.setCustomer_gender(customer_found.getGender());
+                newCart.setCustomer(customer_found);
+                newCart.setTotal_amount(totalPayableAmount);
+                newCart.setDelivery_address(customer_found.getAddressList().get(1));
+
+                updated_cart = cartRepository.save(newCart);
+            }
+        }
+        else {
+            List<Wishlist> cartWishlist = cart.getWishlist();
+            List<BuyLater> customer_buyLaterList = customer_found.getBuyLaterList();
+
+            for (BuyLater buyLater : customer_buyLaterList) {
+                // create new wishlist, save it
+                ProductList productByName = productClient.getProductByName(buyLater.getBuylater_product_name());
+
+                Wishlist wishlist = new Wishlist();
+                wishlist.setProduct_name(productByName.getProduct_name());
+                wishlist.setProduct_manufacturer(productByName.getProduct_manufacturer());
+                wishlist.setProduct_quantity(buyLater.getBuylater_product_quantity());
+                wishlist.setPayable_amount(productByName.getProduct_price() * buyLater.getBuylater_product_quantity());
+                wishlist.setCart(cart);
+                wishlist.setCustomer(customer_found);
+                wishlistRepository.save(wishlist);
+
+                // assign newly created wishlist to customer
+                List<Wishlist> customer_wishlist = customer_found.getWishlist();
+                if (customer_wishlist == null) {
+                    List<Wishlist> customer_new_wishlist = new ArrayList<>();
+                    customer_new_wishlist.add(wishlist);
+                    customer_found.setWishlist(customer_new_wishlist);
+                    customerRepository.save(customer_found);
+                }
+                customer_wishlist.add(wishlist);
+                customer_found.setWishlist(customer_wishlist);
+                customerRepository.save(customer_found);
+
+                Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
+
+                // assign newly created wishlist to cart with other details
+                cartWishlist.add(wishlist);
+                cart.setWishlist(cartWishlist);
+                cart.setCustomer_name(customer_found.getCustomer_name());
+                cart.setCustomer_email(customer_found.getCustomer_email());
+                cart.setCustomer_mobile(customer_found.getCustomer_mobile());
+                cart.setCustomer_gender(customer_found.getGender());
+                cart.setCustomer(customer_found);
+                cart.setTotal_amount(totalPayableAmount);
+                cart.setDelivery_address(customer_found.getAddressList().get(1));
+                updated_cart = cartRepository.save(cart);
+            }
+        }
+        return updated_cart;
+    }
+     */
+
     private Double getTotalPayableAmount(List<Wishlist> foundCustomerWishlist) {
         Double totalPaybleAmount = 0.0;
 
         for(Wishlist wishlist : foundCustomerWishlist) {
             totalPaybleAmount += wishlist.getPayable_amount();
+            System.out.println("468: Customer Service:: " + totalPaybleAmount);
         }
+
 
         return totalPaybleAmount;
     }
 
+    private Cart createNewCart() {
+        Cart cart = new Cart();
+        List<Wishlist> wishlist = new ArrayList<>();
+        cart.setWishlist(wishlist);
+
+        Cart new_cart = cartRepository.save(cart);
+        return new_cart;
+    }
 
     public String logoutCustomer() {
         TOKEN = "";

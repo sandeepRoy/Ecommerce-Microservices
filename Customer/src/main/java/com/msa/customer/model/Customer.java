@@ -41,6 +41,13 @@ public class Customer {
     )
     private List<Wishlist> wishlist;
 
+    @OneToMany(
+            mappedBy = "customer",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL
+    )
+    private List<BuyLater> buyLaterList;
+
     @OneToOne(
             mappedBy = "customer",
             fetch = FetchType.LAZY,

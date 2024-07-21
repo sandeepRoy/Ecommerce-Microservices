@@ -5,14 +5,14 @@ import com.msa.customer.dtos.*;
 import com.msa.customer.exceptions.address.add.AddressAdditionException;
 import com.msa.customer.exceptions.address.update.AddressUpdateException;
 import com.msa.customer.exceptions.customer.firstLogin.CustomerLoginException;
+import com.msa.customer.model.BuyLater;
+import com.msa.customer.model.Cart;
 import com.msa.customer.model.Customer;
 import com.msa.customer.services.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/customer/profile")
@@ -37,7 +37,7 @@ public class CustomerProfileController {
         }
     }
 
-    @PutMapping("/profile-update")
+    @PutMapping("/update")
     public ResponseEntity<Object> updateCustomerProfile(@RequestBody UpdateCustomerProfileDto updateCustomerProfileDto) throws CustomerLoginException {
         if(TOKEN == "") {
             return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
@@ -80,6 +80,30 @@ public class CustomerProfileController {
             return new ResponseEntity<>(customer, HttpStatus.OK);
         }
     }
+
+    @PostMapping("/add-to-buylater")
+    public ResponseEntity<Object> addBuyLater_newProduct(@RequestBody CreateWishlistDto createWishlistDto) throws CustomerLoginException {
+        if (TOKEN == "") {
+            return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
+        }
+        else {
+            BuyLater buyLater = customerService.addBuyLater_newProduct(createWishlistDto);
+            return new ResponseEntity<>(buyLater, HttpStatus.OK);
+        }
+    }
+
+    // Testing
+    /*
+    @PutMapping("/add-buylater-to-cart/PENDING")
+    public ResponseEntity<Object> addToCart_buyLater() throws CustomerLoginException {
+        if (TOKEN == "") {
+            return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
+        }
+        else {
+            Cart cart = customerService.updateCart_addBuyLater();
+            return new ResponseEntity<>(cart, HttpStatus.OK);
+        }
+    }*/
 
     @DeleteMapping("/delete")
     public ResponseEntity<String> deleteCustomer() throws CustomerLoginException {
