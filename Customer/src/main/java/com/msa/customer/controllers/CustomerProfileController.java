@@ -37,7 +37,7 @@ public class CustomerProfileController {
         }
     }
 
-    @PutMapping("/update")
+    @PutMapping("/update/personal-details")
     public ResponseEntity<Object> updateCustomerProfile(@RequestBody UpdateCustomerProfileDto updateCustomerProfileDto) throws CustomerLoginException {
         if(TOKEN == "") {
             return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
@@ -92,19 +92,6 @@ public class CustomerProfileController {
         }
     }
 
-    // Testing
-    /*
-    @PutMapping("/add-buylater-to-cart/PENDING")
-    public ResponseEntity<Object> addToCart_buyLater() throws CustomerLoginException {
-        if (TOKEN == "") {
-            return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
-        }
-        else {
-            Cart cart = customerService.updateCart_addBuyLater();
-            return new ResponseEntity<>(cart, HttpStatus.OK);
-        }
-    }*/
-
     @DeleteMapping("/delete")
     public ResponseEntity<String> deleteCustomer() throws CustomerLoginException {
         if(TOKEN == "") {
@@ -113,6 +100,21 @@ public class CustomerProfileController {
         else{
             String response = customerService.deleteCustomer();
             return new ResponseEntity<>(response, HttpStatus.OK);
+        }
+    }
+
+    // Development Phase - Adding BuyLater items to Cart for purchase
+
+    // Testing 1 : Existing Cart & WishList : Pass
+    // Testing 2 : Non Existing Cart & Wishlist : In Progress
+    @PutMapping("/add-buylater-to-cart")
+    public ResponseEntity<Object> addToCart_buyLater() throws CustomerLoginException {
+        if (TOKEN == "") {
+            return new ResponseEntity<>("Customer Not Logged In!", HttpStatus.UNAUTHORIZED);
+        }
+        else {
+            Cart cart = customerService.updateCart_addBuyLater();
+            return new ResponseEntity<>(cart, HttpStatus.OK);
         }
     }
 }

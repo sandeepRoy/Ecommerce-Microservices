@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import io.jsonwebtoken.Jwts;
@@ -579,116 +580,6 @@ public class CustomerService {
         return new_buyLater;
     }
 
-    // Testing
-    // PUT : Update Cart with buylater items, re-calculate total amount
-    /*
-    public Cart updateCart_addBuyLater() throws CustomerLoginException {
-        if(userEmail == null) {
-            throw new CustomerLoginException("Customer Not Logged In");
-        }
-
-        Cart updated_cart = new Cart();
-
-        Customer customer = new Customer();
-        customer.setCustomer_email(userEmail);
-
-        Example<Customer> customerExample = Example.of(customer);
-        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
-        Cart cart = customer_found.getCart();
-
-        if(cart == null) {
-            Cart newCart = createNewCart();
-            List<Wishlist> cartWishlist = newCart.getWishlist();
-            List<BuyLater> buyLaterList = customer_found.getBuyLaterList();
-            for(BuyLater buyLater : buyLaterList) {
-                ProductList productByName = productClient.getProductByName(buyLater.getBuylater_product_name());
-
-                // create a new wishlist and save it
-                Wishlist wishlist = new Wishlist();
-                wishlist.setProduct_name(productByName.getProduct_name());
-                wishlist.setProduct_manufacturer(productByName.getProduct_manufacturer());
-                wishlist.setProduct_quantity(buyLater.getBuylater_product_quantity());
-                wishlist.setPayable_amount(productByName.getProduct_price() * buyLater.getBuylater_product_quantity());
-                wishlist.setCart(newCart);
-                wishlist.setCustomer(customer_found);
-                wishlistRepository.save(wishlist);
-
-                // assign newly created wishlist to customer and save it
-                List<Wishlist> customer_wishlist = customer_found.getWishlist();
-                if(customer_wishlist == null) {
-                    List<Wishlist> customer_new_wishlist = new ArrayList<>();
-                    customer_new_wishlist.add(wishlist);
-                    customer_found.setWishlist(customer_new_wishlist);
-                    customerRepository.save(customer_found);
-                }
-                customer_wishlist.add(wishlist);
-                customer_found.setWishlist(customer_wishlist);
-                customerRepository.save(customer_found);
-
-                Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
-
-                // assign newly created wishlist to cart with other details and save it
-                cartWishlist.add(wishlist);
-                newCart.setWishlist(cartWishlist);
-                newCart.setCustomer_name(customer_found.getCustomer_name());
-                newCart.setCustomer_email(customer_found.getCustomer_email());
-                newCart.setCustomer_mobile(customer_found.getCustomer_mobile());
-                newCart.setCustomer_gender(customer_found.getGender());
-                newCart.setCustomer(customer_found);
-                newCart.setTotal_amount(totalPayableAmount);
-                newCart.setDelivery_address(customer_found.getAddressList().get(1));
-
-                updated_cart = cartRepository.save(newCart);
-            }
-        }
-        else {
-            List<Wishlist> cartWishlist = cart.getWishlist();
-            List<BuyLater> customer_buyLaterList = customer_found.getBuyLaterList();
-
-            for (BuyLater buyLater : customer_buyLaterList) {
-                // create new wishlist, save it
-                ProductList productByName = productClient.getProductByName(buyLater.getBuylater_product_name());
-
-                Wishlist wishlist = new Wishlist();
-                wishlist.setProduct_name(productByName.getProduct_name());
-                wishlist.setProduct_manufacturer(productByName.getProduct_manufacturer());
-                wishlist.setProduct_quantity(buyLater.getBuylater_product_quantity());
-                wishlist.setPayable_amount(productByName.getProduct_price() * buyLater.getBuylater_product_quantity());
-                wishlist.setCart(cart);
-                wishlist.setCustomer(customer_found);
-                wishlistRepository.save(wishlist);
-
-                // assign newly created wishlist to customer
-                List<Wishlist> customer_wishlist = customer_found.getWishlist();
-                if (customer_wishlist == null) {
-                    List<Wishlist> customer_new_wishlist = new ArrayList<>();
-                    customer_new_wishlist.add(wishlist);
-                    customer_found.setWishlist(customer_new_wishlist);
-                    customerRepository.save(customer_found);
-                }
-                customer_wishlist.add(wishlist);
-                customer_found.setWishlist(customer_wishlist);
-                customerRepository.save(customer_found);
-
-                Double totalPayableAmount = getTotalPayableAmount(cartWishlist);
-
-                // assign newly created wishlist to cart with other details
-                cartWishlist.add(wishlist);
-                cart.setWishlist(cartWishlist);
-                cart.setCustomer_name(customer_found.getCustomer_name());
-                cart.setCustomer_email(customer_found.getCustomer_email());
-                cart.setCustomer_mobile(customer_found.getCustomer_mobile());
-                cart.setCustomer_gender(customer_found.getGender());
-                cart.setCustomer(customer_found);
-                cart.setTotal_amount(totalPayableAmount);
-                cart.setDelivery_address(customer_found.getAddressList().get(1));
-                updated_cart = cartRepository.save(cart);
-            }
-        }
-        return updated_cart;
-    }
-     */
-
     private Double getTotalPayableAmount(List<Wishlist> foundCustomerWishlist) {
         Double totalPaybleAmount = 0.0;
 
@@ -721,6 +612,93 @@ public class CustomerService {
         }
         else{
             return "Valid";
+        }
+    }
+
+    // Development Phase - Add BuyLater items to Cart for Purchase, recalculate amount
+    // PUT - Cart, ADD : BuyLater, Add Buylater items to cart, recalculate total amount
+    public Cart updateCart_addBuyLater() throws CustomerLoginException {
+        if(userEmail == null) {
+            throw new CustomerLoginException("Customer Not Logged In");
+        }
+
+        Customer customer = new Customer();
+        customer.setCustomer_email(userEmail);
+
+        Example<Customer> customerExample = Example.of(customer);
+        Customer customer_found = customerRepository.findOne(customerExample).orElseThrow(() -> new RuntimeException("Customer Not Found"));
+
+        List<BuyLater> buyLaterList = customer_found.getBuyLaterList();
+        Cart cart = customer_found.getCart();
+
+        // check if cart exists by earlier transactions, like adding wishlist / buylater items
+        if(cart == null) {
+            log.info("Cart is null, resuming from here!");
+
+            // a new cart is required to hold all the buylater items
+            Cart newCart = createNewCart();
+
+            List<Wishlist> wishlist = newCart.getWishlist();
+
+            for(BuyLater buyLater : buyLaterList) {
+                Wishlist buyLaterToWish = new Wishlist();
+                buyLaterToWish.setProduct_name(buyLater.getBuylater_product_name());
+                buyLaterToWish.setProduct_quantity(buyLater.getBuylater_product_quantity());
+                buyLaterToWish.setProduct_manufacturer(buyLater.getBuylater_product_manufacturer());
+                buyLaterToWish.setPayable_amount(buyLater.getBuylater_payable_amount() * buyLater.getBuylater_product_quantity());
+                buyLaterToWish.setCart(newCart);
+                buyLaterToWish.setCustomer(customer_found);
+
+                wishlist.add(buyLaterToWish);
+
+                wishlistRepository.save(buyLaterToWish);
+
+                buyLaterToWish = null;
+            }
+
+            Double totalPayableAmount = getTotalPayableAmount(wishlist);
+
+            newCart.setTotal_amount(totalPayableAmount);
+            newCart.setCustomer(customer_found);
+            newCart.setCustomer_name(customer_found.getCustomer_name());
+            newCart.setCustomer_email(customer_found.getCustomer_email());
+            newCart.setCustomer_gender(customer_found.getGender());
+            newCart.setCustomer_mobile(customer_found.getCustomer_mobile());
+            newCart.setWishlist(wishlist);
+
+            Cart createdCart = cartRepository.save(newCart);
+            return createdCart;
+        }
+
+        // since cart exists, just add buylayter items as wishes to it.
+        else {
+
+            log.info("Cart is isn't null, resuming from here!");
+
+            // on existing cart's wishlist, buylater items are added as wishes
+            List<Wishlist> wishlist = cart.getWishlist();
+
+            for (BuyLater buyLater : buyLaterList) {
+                Wishlist buyLaterToWishlistItem = new Wishlist();
+                buyLaterToWishlistItem.setProduct_name(buyLater.getBuylater_product_name());
+                buyLaterToWishlistItem.setProduct_quantity(buyLater.getBuylater_product_quantity());
+                buyLaterToWishlistItem.setProduct_manufacturer(buyLater.getBuylater_product_manufacturer());
+                buyLaterToWishlistItem.setPayable_amount(buyLater.getBuylater_payable_amount());
+                buyLaterToWishlistItem.setCart(cart);
+                buyLaterToWishlistItem.setCustomer(customer_found);
+
+                wishlist.add(buyLaterToWishlistItem);
+
+                wishlistRepository.save(buyLaterToWishlistItem);
+                buyLaterToWishlistItem = null;
+            }
+
+            Double totalPayableAmount = getTotalPayableAmount(wishlist);
+            cart.setTotal_amount(totalPayableAmount);
+
+            Cart updated = cartRepository.save(cart);
+
+            return updated;
         }
     }
 }
